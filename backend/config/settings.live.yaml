@@ -136,6 +136,15 @@ plc_orchestrator:
   epson_z_mm: 9.8
   epson_u_min_deg: 30.0
   epson_u_max_deg: 110.0
+  # Epson V2.0 alignment parameters. Distance <= threshold means tweezer
+  # predicted tip and target are considered overlapped. If not overlapped,
+  # X/Y correction = pixel_error * mm_per_px; set mm_per_px negative if
+  # the field direction is opposite on the real machine.
+  epson_alignment_match_distance_px: 20.0
+  epson_alignment_x_mm_per_px: 0.009857
+  epson_alignment_y_mm_per_px: 0.009857
+  epson_alignment_max_correction_mm: 5.0
+  epson_alignment_snapshot_timeout_ms: 2000
   nova5_to_epson_mapping:
     enabled: true
     path: config/nova5_to_epson_grid.yaml

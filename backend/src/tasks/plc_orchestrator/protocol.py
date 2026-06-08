@@ -71,6 +71,38 @@ they run post-pick confirmation logic on one or more fresh camera frames at
 the same photo position.
 """
 
+EpsonStageDecision = Dict[str, object]
+"""Decision returned by the high-level orchestrator for Epson in-motion stages.
+
+Expected keys:
+    code: int
+        Function code to return to PLC (50/51/60/61/70/71).
+    coord: Optional[EpsonCoord]
+        Present only for correction responses 51/61. X/Y are corrected; Z/U
+        remain the current target's Z/U.
+    desc: str
+        Human-readable reason for logging.
+"""
+
+EpsonMotionStageHook = Callable[[PlcPoint, int], Optional[EpsonStageDecision]]
+"""Handle Epson in-motion protocol requests.
+
+PLC → PC func=50: Epson arrived at pick waiting position. The hook checks
+tweezer-tip alignment and returns PC func=50 (aligned) or func=51 + corrected
+coord (XY correction).
+
+PLC → PC func=60: Epson arrived at pick-down position. The hook checks
+alignment again and returns PC func=60 (pick foreign object) or func=61 +
+corrected coord (XY correction).
+
+PLC → PC func=70: Epson has clamped and moved aside. The hook confirms whether
+the foreign object disappeared and returns PC func=70 (discard) or func=71
+(pick failed, skip current object).
+
+Return None to keep silent while the vision/tweezer check is still waiting for
+a fresh frame.
+"""
+
 NovaMovingHook = Callable[[Optional[PlcPoint], int], None]
 """Fired right before the worker emits an advance code (21/22/23). Args:
 (point_just_finished, advance_code). Use this to signal downstream
@@ -139,6 +171,12 @@ def _default_next_task_ready() -> bool:
     return True
 
 
+def _default_epson_motion_stage(
+    _point: PlcPoint, _stage_func: int
+) -> Optional[EpsonStageDecision]:
+    return None
+
+
 def _default_nova5_moving(_point: Optional[PlcPoint], _code: int) -> None:
     pass
 
@@ -181,6 +219,7 @@ class ProtocolWorker(threading.Thread):
         has_pending_picks: PendingPicksQuery = _default_has_pending_picks,
         batch_received_empty: BatchEmptyQuery = _default_batch_received_empty,
         next_task_ready: NextTaskReadyQuery = _default_next_task_ready,
+        on_epson_motion_stage: EpsonMotionStageHook = _default_epson_motion_stage,
         on_nova5_moving: NovaMovingHook = _default_nova5_moving,
         on_epson_coord_sent: EpsonCoordSentHook = _default_epson_coord_sent,
         on_epson_pick_request: EpsonPickRequestHook = _default_epson_pick_request,
@@ -198,6 +237,7 @@ class ProtocolWorker(threading.Thread):
         self.has_pending_picks = has_pending_picks
         self.batch_received_empty = batch_received_empty
         self.next_task_ready = next_task_ready
+        self.on_epson_motion_stage = on_epson_motion_stage
         self.on_nova5_moving = on_nova5_moving
         self.on_epson_coord_sent = on_epson_coord_sent
         self.on_epson_pick_request = on_epson_pick_request
@@ -765,6 +805,33 @@ class ProtocolWorker(threading.Thread):
                         cur_key,
                     )
 
+        # epson_ls6 in-motion protocol (V2.0):
+        # - func=50: arrived at pick waiting position → PC returns 50 or 51+coord
+        # - func=60: arrived at pick-down position     → PC returns 60 or 61+coord
+        # - func=70: moved aside after clamping        → PC returns 70 or 71
+        for stage_func in (50, 60, 70):
+            if self._is_unhandled("epson_ls6", stage_func):
+                if self.active_press_index != cur_press or self.active_photo_key != cur_key:
+                    logger.warning(
+                        "order-guard: photo nova5[%s,%s] not acked, refusing epson func=%s",
+                        p.press_index, p.photo_index, stage_func,
+                    )
+                    continue
+                try:
+                    decision = self.on_epson_motion_stage(p, stage_func)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("on_epson_motion_stage hook raised for func=%s: %s", stage_func, exc)
+                    decision = None
+                if decision is None:
+                    logger.debug(
+                        "epson func=%s at %s pending high-level vision/tweezer decision",
+                        stage_func, cur_key,
+                    )
+                    continue
+                ok = self._send_epson_stage_decision(p, stage_func, decision)
+                if ok:
+                    self._push_auto_status()
+
         # epson_ls6 asks "what next?" → 20 (repeat), 21 (next photo), 22 (next press),
         # 23 (all done).
         if self._is_unhandled("epson_ls6", 21):
@@ -789,6 +856,62 @@ class ProtocolWorker(threading.Thread):
                 cur_key,
             )
             self._handle_safety_reject()
+
+    def _send_epson_stage_decision(
+        self, point: PlcPoint, stage_func: int, decision: EpsonStageDecision
+    ) -> bool:
+        """Send a V2.0 Epson in-motion decision back to PLC.
+
+        50/60/70/71 are function-only responses; 51/61 carry corrected Epson
+        X/Y while keeping the current target's Z/U unchanged.
+        """
+        r = self.cfg.registers
+        try:
+            code = int(decision.get("code"))
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "invalid Epson stage decision for func=%s at %s: %s",
+                stage_func, point.key, decision,
+            )
+            return False
+        desc = str(decision.get("desc") or f"epson stage func={stage_func}")
+        coord_obj = decision.get("coord")
+
+        if code in (51, 61):
+            if not isinstance(coord_obj, dict):
+                logger.warning(
+                    "Epson correction code=%s requires coord, got %s", code, coord_obj
+                )
+                return False
+            coord: EpsonCoord = {
+                "x": float(coord_obj["x"]),
+                "y": float(coord_obj["y"]),
+                "z": float(coord_obj["z"]),
+                "u": float(coord_obj["u"]),
+            }
+            return self._send_coords(
+                robot="epson_ls6",
+                axes=["x", "y", "z", "u"],
+                values=coord,
+                pc_addrs=[r.pc_epson_x, r.pc_epson_y, r.pc_epson_z, r.pc_epson_u],
+                plc_echo_addrs=[r.plc_recv_epson_x, r.plc_recv_epson_y,
+                                r.plc_recv_epson_z, r.plc_recv_epson_u],
+                pc_func_addr=r.pc_epson_func,
+                pc_flag_addr=r.pc_epson_send_flag,
+                return_code=code,
+                tag=f"epson_ls6_stage{stage_func}[{point.press_index},{point.photo_index}]",
+            )
+
+        if code in (50, 60, 70, 71):
+            return self._send_non_coord(
+                "epson_ls6", r.pc_epson_func, r.pc_epson_send_flag, code, desc
+            )
+
+        logger.warning(
+            "unsupported Epson stage response code=%s for PLC func=%s at %s",
+            code, stage_func, point.key,
+        )
+        return False
 
     def _handle_safety_reject(self) -> None:
         """Epson rejected the last coord as out-of-safety-range (func=3).

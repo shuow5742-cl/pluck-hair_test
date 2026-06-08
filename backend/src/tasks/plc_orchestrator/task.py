@@ -39,7 +39,7 @@ from src.pose_sources import PlcPoseSource, register_pose_source
 from src.tasks.stabilized_detection.pick_process import PickProcessConfig
 
 from .points import PlcPoint, load_points
-from .protocol import EpsonCoord, ProtocolWorker
+from .protocol import EpsonCoord, EpsonStageDecision, ProtocolWorker
 
 logger = logging.getLogger(__name__)
 
@@ -92,10 +92,17 @@ class PlcOrchestratorTask:
             match_size_ratio_threshold=cfg.pick_confirm_match_size_ratio,
         )
         self._dispatched_pick: Optional[Dict[str, Any]] = None
+        self._last_epson_coord: Optional[EpsonCoord] = None
         self._confirm_frames_remaining: int = 0
         self._awaiting_confirmation_batch: bool = False
+        self._confirmation_mode: Optional[str] = None
+        self._post_pick_stage_decision: Optional[EpsonStageDecision] = None
         self._ignored_targets: List[Dict[str, Any]] = []
         self._confirm_started_at: Optional[float] = None
+        self._alignment_stage_started_at: Dict[int, float] = {}
+        self._alignment_last_wait_log_at: float = 0.0
+        from src.comm.inproc_bus import get_live_state_bus
+        self._live_state = get_live_state_bus()
         self._cycle_timing_lock = threading.Lock()
         self._photo_cycle_timing: Optional[Dict[str, Any]] = None
 
@@ -107,6 +114,7 @@ class PlcOrchestratorTask:
             has_pending_picks=self._has_pending_picks,
             batch_received_empty=self._batch_received_empty,
             next_task_ready=self._next_task_ready,
+            on_epson_motion_stage=self._on_epson_motion_stage,
             on_nova5_moving=self._on_nova5_moving,
             on_epson_coord_sent=self._on_epson_coord_sent,
             on_epson_pick_request=self._on_epson_pick_request,
@@ -232,7 +240,11 @@ class PlcOrchestratorTask:
             pose_str = "flange_xy=<unavailable>"
         batch_label = (
             "confirm_world_picks"
-            if self._dispatched_pick is not None or confirm_followup_needed
+            if (
+                self._dispatched_pick is not None
+                or self._post_pick_stage_decision is not None
+                or confirm_followup_needed
+            )
             else "world_picks"
         )
         self._record_photo_cycle_event(
@@ -527,6 +539,7 @@ class PlcOrchestratorTask:
                 return False
             self._accepting_batch = True
             self._awaiting_confirmation_batch = True
+            self._confirmation_mode = "func21_post_pick"
             self._confirm_started_at = time.perf_counter()
             det_id = self._dispatched_pick.get("detection_id")
             attempt = self._dispatched_pick.get("pick_attempts")
@@ -689,8 +702,13 @@ class PlcOrchestratorTask:
         with self._picks_lock:
             self._dispatched_pick = dict(pick)
             self._dispatched_pick["selected_u_deg"] = coord["u"]
+            self._dispatched_pick["epson_coord"] = dict(coord)
+            self._last_epson_coord = dict(coord)
             self._confirm_frames_remaining = self._confirm_cfg.confirm_window_frames
             self._awaiting_confirmation_batch = False
+            self._confirmation_mode = None
+            self._post_pick_stage_decision = None
+            self._alignment_stage_started_at.clear()
         return coord
 
     def _map_nova5_xy_to_epson(self, x: float, y: float) -> Optional[ArmGridMatch]:
@@ -731,6 +749,227 @@ class PlcOrchestratorTask:
                 "tracking_radius_px": tracking_radius_px,
             },
         })
+
+    # ---- Epson V2.0 in-motion protocol hooks ----
+
+    def _on_epson_motion_stage(
+        self, point: PlcPoint, stage_func: int
+    ) -> Optional[EpsonStageDecision]:
+        self._record_photo_cycle_event(
+            f"epson_func{stage_func}_request", photo=point.key
+        )
+        if stage_func in (50, 60):
+            return self._handle_epson_alignment_request(point, stage_func)
+        if stage_func == 70:
+            return self._handle_epson_pick_result_request(point)
+        logger.warning("unsupported Epson motion stage func=%s at %s", stage_func, point.key)
+        return None
+
+    def _handle_epson_alignment_request(
+        self, point: PlcPoint, stage_func: int
+    ) -> Optional[EpsonStageDecision]:
+        """Check tweezer predicted tip vs. current target and optionally correct XY.
+
+        stage_func=50 checks at the pick waiting position and returns PC func=50
+        when aligned or func=51 + corrected coord when not aligned.
+
+        stage_func=60 checks after Z has descended and returns PC func=60 when
+        aligned or func=61 + corrected coord when not aligned.
+        """
+        now = time.time()
+        publish_resume = False
+        with self._picks_lock:
+            pick = dict(self._dispatched_pick) if self._dispatched_pick is not None else None
+            coord = dict(self._last_epson_coord) if self._last_epson_coord is not None else None
+            if coord is None and pick is not None and isinstance(pick.get("epson_coord"), dict):
+                coord = dict(pick["epson_coord"])
+            stage_started_at = self._alignment_stage_started_at.get(stage_func)
+            if stage_started_at is None:
+                stage_started_at = now
+                self._alignment_stage_started_at[stage_func] = stage_started_at
+                publish_resume = True
+
+        if pick is None or coord is None:
+            logger.warning(
+                "epson func=%s alignment check requested at %s but no active dispatched pick/coord",
+                stage_func, point.key,
+            )
+            return None
+
+        if publish_resume:
+            self._publish_frame_loop_resume(
+                f"epson func{stage_func} alignment check at {point.key}",
+                pipeline_runs=1,
+            )
+
+        target_xy = _pick_target_xy(pick)
+        if target_xy is None:
+            logger.warning(
+                "epson func=%s alignment refused: dispatched pick has no pixel target: %s",
+                stage_func, pick.get("detection_id"),
+            )
+            return None
+
+        snapshot = self._live_state.snapshot()
+        updated_at = float(snapshot.get("updated_at") or 0.0)
+        timeout_s = max(0.1, float(self._cfg.epson_alignment_snapshot_timeout_ms) / 1000.0)
+        if updated_at < stage_started_at:
+            if now - stage_started_at > timeout_s and now - self._alignment_last_wait_log_at > 1.0:
+                self._alignment_last_wait_log_at = now
+                logger.warning(
+                    "epson func=%s alignment waiting for fresh tweezer frame at %s: age=%.3fs",
+                    stage_func, point.key, max(0.0, now - updated_at),
+                )
+                self._publish_frame_loop_resume(
+                    f"epson func{stage_func} alignment retry at {point.key}",
+                    pipeline_runs=1,
+                )
+            return None
+
+        tweezer = snapshot.get("tweezer") if isinstance(snapshot, dict) else None
+        if not isinstance(tweezer, dict) or not tweezer.get("found"):
+            if now - self._alignment_last_wait_log_at > 1.0:
+                self._alignment_last_wait_log_at = now
+                logger.warning(
+                    "epson func=%s alignment waiting: tweezer tip not found at %s",
+                    stage_func, point.key,
+                )
+            return None
+        tip_xy = tweezer.get("tip_xy")
+        if not isinstance(tip_xy, (list, tuple)) or len(tip_xy) < 2:
+            return None
+
+        tip_x = float(tip_xy[0])
+        tip_y = float(tip_xy[1])
+        target_x = float(target_xy[0])
+        target_y = float(target_xy[1])
+        error_px_x = target_x - tip_x
+        error_px_y = target_y - tip_y
+        dist_px = math.hypot(error_px_x, error_px_y)
+        threshold_px = float(self._cfg.epson_alignment_match_distance_px)
+
+        if dist_px <= threshold_px:
+            with self._picks_lock:
+                self._alignment_stage_started_at.pop(stage_func, None)
+            logger.info(
+                "epson func=%s aligned at %s: det=%s tip=(%.2f, %.2f) "
+                "target=(%.2f, %.2f) dist=%.2fpx <= %.2fpx",
+                stage_func, point.key, pick.get("detection_id"),
+                tip_x, tip_y, target_x, target_y, dist_px, threshold_px,
+            )
+            return {
+                "code": int(stage_func),
+                "coord": None,
+                "desc": f"epson func{stage_func} aligned at {point.key}",
+            }
+
+        dx_mm = error_px_x * float(self._cfg.epson_alignment_x_mm_per_px)
+        dy_mm = error_px_y * float(self._cfg.epson_alignment_y_mm_per_px)
+        max_corr = float(self._cfg.epson_alignment_max_correction_mm)
+        corr_len = math.hypot(dx_mm, dy_mm)
+        if max_corr > 0.0 and corr_len > max_corr:
+            scale = max_corr / corr_len
+            dx_mm *= scale
+            dy_mm *= scale
+
+        corrected: EpsonCoord = {
+            "x": float(coord["x"]) + dx_mm,
+            "y": float(coord["y"]) + dy_mm,
+            "z": float(coord["z"]),
+            "u": float(coord["u"]),
+        }
+        with self._picks_lock:
+            self._last_epson_coord = dict(corrected)
+            if self._dispatched_pick is not None:
+                self._dispatched_pick["epson_coord"] = dict(corrected)
+            self._alignment_stage_started_at.pop(stage_func, None)
+
+        response_code = 51 if stage_func == 50 else 61
+        logger.warning(
+            "epson func=%s not aligned at %s: det=%s tip=(%.2f, %.2f) "
+            "target=(%.2f, %.2f) error_px=(%.2f, %.2f) dist=%.2fpx > %.2fpx; "
+            "send func=%s correction dxy_mm=(%.4f, %.4f) coord=(%.4f, %.4f, %.4f, %.4f)",
+            stage_func, point.key, pick.get("detection_id"),
+            tip_x, tip_y, target_x, target_y, error_px_x, error_px_y,
+            dist_px, threshold_px, response_code, dx_mm, dy_mm,
+            corrected["x"], corrected["y"], corrected["z"], corrected["u"],
+        )
+        return {
+            "code": response_code,
+            "coord": corrected,
+            "desc": f"epson func{stage_func} XY correction at {point.key}",
+        }
+
+    def _handle_epson_pick_result_request(
+        self, point: PlcPoint
+    ) -> Optional[EpsonStageDecision]:
+        """PLC func=70: confirm whether the foreign object was picked.
+
+        The old disappearance-confirmation logic is reused, but the result is
+        returned immediately through the new V2.0 func=70/71 handshake:
+        - PC func=70: object disappeared → PLC may discard it.
+        - PC func=71: object still exists → mark this attempt failed and skip
+          this object; remaining objects at the same photo position stay queued.
+        """
+        publish_resume = False
+        with self._picks_lock:
+            if self._post_pick_stage_decision is not None:
+                decision = dict(self._post_pick_stage_decision)
+                self._post_pick_stage_decision = None
+                return decision
+
+            if self._dispatched_pick is None:
+                logger.warning("epson func=70 at %s but no active dispatched pick", point.key)
+                return {
+                    "code": 71,
+                    "coord": None,
+                    "desc": f"epson func70 no active pick at {point.key}",
+                }
+
+            if not self._awaiting_confirmation_batch:
+                self._accepting_batch = True
+                self._awaiting_confirmation_batch = True
+                self._confirmation_mode = "func70_pick_result"
+                self._confirm_started_at = time.perf_counter()
+                self._confirm_frames_remaining = self._confirm_cfg.confirm_window_frames
+                publish_resume = True
+                det_id = self._dispatched_pick.get("detection_id")
+                attempt = self._dispatched_pick.get("pick_attempts")
+            else:
+                det_id = self._dispatched_pick.get("detection_id")
+                attempt = self._dispatched_pick.get("pick_attempts")
+
+        if publish_resume:
+            self._record_photo_cycle_event(
+                "func70_pick_result_confirmation_armed",
+                detection_id=det_id,
+                attempt=attempt,
+            )
+            logger.info(
+                "func70 pick-result confirmation armed: photo=%s det=%s attempt=%s frames=%s",
+                point.key, det_id, attempt, self._confirm_cfg.confirm_window_frames,
+            )
+            self._publish_frame_loop_resume(
+                f"epson func70 pick-result confirmation at {point.key}",
+                pipeline_runs=self._confirm_cfg.confirm_window_frames,
+            )
+        return None
+
+    def _finish_func70_confirmation_locked(self, decision: EpsonStageDecision) -> None:
+        """Store func70/71 decision while clearing the active pick state.
+
+        Do not call _reset_confirmation_locked() here because the ProtocolWorker
+        still needs to read _post_pick_stage_decision on its next poll and send
+        it to PLC.
+        """
+        self._post_pick_stage_decision = dict(decision)
+        self._dispatched_pick = None
+        self._last_epson_coord = None
+        self._confirm_frames_remaining = 0
+        self._awaiting_confirmation_batch = False
+        self._confirmation_mode = None
+        self._confirm_started_at = None
+        self._alignment_stage_started_at.clear()
 
     # ---- Diagnostics ----
 
@@ -834,9 +1073,13 @@ class PlcOrchestratorTask:
 
     def _reset_confirmation_locked(self) -> None:
         self._dispatched_pick = None
+        self._last_epson_coord = None
         self._confirm_frames_remaining = 0
         self._awaiting_confirmation_batch = False
+        self._confirmation_mode = None
+        self._post_pick_stage_decision = None
         self._confirm_started_at = None
+        self._alignment_stage_started_at.clear()
 
     def _confirmation_elapsed_ms_locked(self) -> Optional[float]:
         if self._confirm_started_at is None:
@@ -856,6 +1099,12 @@ class PlcOrchestratorTask:
         after that stabilized batch, we should immediately queue a retry
         instead of silently requesting many more confirmation rounds.
         """
+        if self._confirmation_mode == "func70_pick_result":
+            return self._handle_func70_pick_result_batch_locked(
+                picks,
+                seg_frame_id=seg_frame_id,
+            )
+
         self._awaiting_confirmation_batch = False
         self._accepting_batch = False
         self._batch_received = True
@@ -940,6 +1189,106 @@ class PlcOrchestratorTask:
                 f"{confirm_total_ms:.2f}" if confirm_total_ms is not None else "<unknown>",
             )
         self._reset_confirmation_locked()
+        return False
+
+    def _handle_func70_pick_result_batch_locked(
+        self,
+        picks: List[Dict[str, Any]],
+        *,
+        seg_frame_id: Any,
+    ) -> bool:
+        """Handle the new PLC func=70 pick-result confirmation batch.
+
+        Unlike the old func=21 confirmation, func=70 does not retry the same
+        object. If the target still exists, reply PC func=71 and ignore that
+        target for the rest of the current photo position; then the remaining
+        objects can continue normally.
+        """
+        self._awaiting_confirmation_batch = False
+        self._accepting_batch = False
+        self._batch_received = True
+        self._received_was_empty = False
+        self._last_seg_frame_id = seg_frame_id
+
+        current_picks = [
+            dict(p)
+            for p in picks
+            if p.get("world_xy_mm") and not self._is_ignored_pick_locked(p)
+        ]
+        target = self._dispatched_pick
+        confirm_total_ms = self._confirmation_elapsed_ms_locked()
+        if target is None:
+            self._replace_buffer_locked(current_picks)
+            decision: EpsonStageDecision = {
+                "code": 71,
+                "coord": None,
+                "desc": "func70 confirmation had no active dispatched pick",
+            }
+            self._finish_func70_confirmation_locked(decision)
+            logger.warning("func70 confirmation finished with no active dispatched pick")
+            return False
+
+        match_index = self._find_matching_pick_index(target, current_picks)
+        if match_index is None:
+            # Target disappeared: successful clamp/pick. Keep any newly visible
+            # remaining objects, and tell PLC to discard the clamped foreign body.
+            self._replace_buffer_locked(current_picks)
+            decision = {
+                "code": 70,
+                "coord": None,
+                "desc": f"pick success at {self._worker.active_photo_key or '?'}",
+            }
+            self._record_photo_cycle_event(
+                "func70_pick_success",
+                detection_id=target.get("detection_id"),
+                attempt=target.get("pick_attempts"),
+                confirm_total_ms=confirm_total_ms,
+                remaining=len(self._world_picks),
+            )
+            logger.info(
+                "func70 pick success: det=%s attempt=%s disappeared confirm_total_ms=%s remaining=%d",
+                target.get("detection_id"),
+                target.get("pick_attempts"),
+                f"{confirm_total_ms:.2f}" if confirm_total_ms is not None else "<unknown>",
+                len(self._world_picks),
+            )
+            self._finish_func70_confirmation_locked(decision)
+            return False
+
+        matched = dict(current_picks[match_index])
+        matched["pick_attempts"] = int(target.get("pick_attempts", 0))
+        remaining_picks = [
+            dict(p)
+            for idx, p in enumerate(current_picks)
+            if idx != match_index
+        ]
+        self._ignored_targets.append(dict(matched))
+        self._world_picks.clear()
+        for pick in remaining_picks:
+            if not self._is_ignored_pick_locked(pick):
+                self._world_picks.append(pick)
+
+        decision = {
+            "code": 71,
+            "coord": None,
+            "desc": f"pick failed at {self._worker.active_photo_key or '?'}",
+        }
+        self._record_photo_cycle_event(
+            "func70_pick_failed_skip",
+            detection_id=matched.get("detection_id"),
+            attempt=matched.get("pick_attempts"),
+            confirm_total_ms=confirm_total_ms,
+            remaining=len(self._world_picks),
+        )
+        logger.warning(
+            "func70 pick failed: det=%s attempt=%s still present; reply func=71 and skip target; "
+            "confirm_total_ms=%s remaining=%d",
+            matched.get("detection_id"),
+            matched.get("pick_attempts"),
+            f"{confirm_total_ms:.2f}" if confirm_total_ms is not None else "<unknown>",
+            len(self._world_picks),
+        )
+        self._finish_func70_confirmation_locked(decision)
         return False
 
     def _find_matching_pick_index(
@@ -1074,6 +1423,22 @@ class PlcOrchestratorTask:
                 }
             )
 
+
+
+def _pick_target_xy(pick: Dict[str, Any]) -> Optional[tuple[float, float]]:
+    """Return the pixel point used for tweezer-target alignment.
+
+    Prefer the actual algorithm pick point; fall back to bbox center so older
+    pick payloads still work.
+    """
+    for key in ("pick_point_xy_px", "bbox_center_xy_px"):
+        value = pick.get(key)
+        if isinstance(value, (list, tuple)) and len(value) >= 2:
+            try:
+                return float(value[0]), float(value[1])
+            except Exception:  # noqa: BLE001
+                continue
+    return None
 
 def _pick_matches_tool(pick: Dict[str, Any], tool_code: int) -> bool:
     preferred = pick.get("preferred_epson_tool")

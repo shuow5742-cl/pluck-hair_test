@@ -399,6 +399,15 @@ class PlcOrchestratorConfig:
     # Outside this range, plc_orchestrator falls back to the fixed YAML U.
     epson_u_min_deg: float = 30.0
     epson_u_max_deg: float = 110.0
+    # Tweezer-target alignment thresholds for Epson in-motion protocol V2.0.
+    # PLC func=50/60 waits while the orchestrator looks at the live tweezer tip.
+    # If pixel distance <= epson_alignment_match_distance_px, the response is
+    # 50/60. Otherwise the response is 51/61 plus an XY-corrected Epson coord.
+    epson_alignment_match_distance_px: float = 20.0
+    epson_alignment_x_mm_per_px: float = 0.009857
+    epson_alignment_y_mm_per_px: float = 0.009857
+    epson_alignment_max_correction_mm: float = 5.0
+    epson_alignment_snapshot_timeout_ms: int = 2000
     # Post-pick confirmation thresholds used to decide whether the object
     # is still present after Epson reports one pick attempt complete.
     pick_confirm_match_distance_px: float = 30.0
@@ -515,6 +524,36 @@ class PlcOrchestratorConfig:
             ),
             epson_u_min_deg=float(data.get("epson_u_min_deg", cls.epson_u_min_deg)),
             epson_u_max_deg=float(data.get("epson_u_max_deg", cls.epson_u_max_deg)),
+            epson_alignment_match_distance_px=float(
+                data.get(
+                    "epson_alignment_match_distance_px",
+                    cls.epson_alignment_match_distance_px,
+                )
+            ),
+            epson_alignment_x_mm_per_px=float(
+                data.get(
+                    "epson_alignment_x_mm_per_px",
+                    cls.epson_alignment_x_mm_per_px,
+                )
+            ),
+            epson_alignment_y_mm_per_px=float(
+                data.get(
+                    "epson_alignment_y_mm_per_px",
+                    cls.epson_alignment_y_mm_per_px,
+                )
+            ),
+            epson_alignment_max_correction_mm=float(
+                data.get(
+                    "epson_alignment_max_correction_mm",
+                    cls.epson_alignment_max_correction_mm,
+                )
+            ),
+            epson_alignment_snapshot_timeout_ms=int(
+                data.get(
+                    "epson_alignment_snapshot_timeout_ms",
+                    cls.epson_alignment_snapshot_timeout_ms,
+                )
+            ),
             pick_confirm_match_distance_px=float(
                 data.get(
                     "pick_confirm_match_distance_px",
