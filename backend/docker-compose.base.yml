@@ -1,0 +1,12 @@
+services:
+  backend-base:
+    image: ${BACKEND_BASE_IMAGE:-pluck/backend-base:cu128}
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+      secrets:
+        - github_token
+
+secrets:
+  github_token:
+    environment: GITHUB_TOKEN

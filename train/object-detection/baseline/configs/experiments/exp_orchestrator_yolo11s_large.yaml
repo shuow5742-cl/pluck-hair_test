@@ -1,0 +1,25 @@
+experiment:
+  name: yolo11s_large_external
+  framework: yolo
+  output_dir: experiments/yolo11s_large_external_framework
+
+shared_resources:
+  datasets_root: .
+  weights_cache: models
+
+framework_cfg:
+  project_dir: frameworks/yolo
+  script: frameworks/yolo/scripts/train.py
+  args:
+    model: yolo11s.pt
+    # data_yaml: dataset/custom_dataset_20251114.yaml
+    data_yaml: dataset/pluck_subset100_tiles640.yaml
+    epochs: 100
+    batch: 50
+    imgsz: 640
+    device: 0
+    workers: 4
+    task_type: hbb
+    nbs: 64
+
+# python orchestrator/scripts/train.py --config configs/experiments/exp_orchestrator_yolo11s_large.yaml

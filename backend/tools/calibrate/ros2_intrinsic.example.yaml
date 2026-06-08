@@ -1,0 +1,67 @@
+# ROS2 one-shot intrinsic calibration config
+#
+# Run:
+#   bash tools/calibrate/ros2_intrinsic_calibrate.sh tools/calibrate/ros2_intrinsic.example.yaml
+#
+# Notes:
+# - This expects you already installed ROS2 packages:
+#     sudo apt install ros-$ROS_DISTRO-v4l2-camera ros-$ROS_DISTRO-camera-calibration
+# - If your shell didn't source ROS, set `ros.setup_bash`.
+
+ros:
+  # Optional: auto-source ROS2 environment inside the runner.
+  # If you already `source /opt/ros/$ROS_DISTRO/setup.bash` in your terminal, you can omit this.
+  setup_bash: "/opt/ros/${ROS_DISTRO}/setup.bash"
+
+# Optional: print /dev/video* and v4l2 formats before starting
+probe: true
+
+camera:
+  # Camera backend:
+  # - "daheng": Daheng industrial camera via gxipy (recommended for MER2, etc.)
+  # - "v4l2": UVC/V4L2 cameras via /dev/videoX
+  backend: "daheng"
+
+  # V4L2 only (ignored when backend=daheng)
+  video_device: "auto"
+  # match: "usb-046d"
+
+  # Daheng only
+  daheng:
+    # 1-based index from gxipy device list (see probe output)
+    device_index: 1
+    # Best-effort match by gxipy device_id string (optional)
+    device_id: "MER2-301-125U3C(FCM25020040)"
+    # Preferred when multiple cameras: match by serial number
+    # serial: "XXXXXXXX"
+  image_size: [2048, 1536]
+  frame_id: "camera_link"
+
+calibrator:
+  # Pattern type:
+  # - "chessboard" (default if omitted)
+  # - "circles"    (symmetric dots grid)
+  # - "acircles"   (asymmetric dots grid)
+  pattern: "circles"
+  # Grid size (points), e.g. "9x9" for a 9x9 symmetric dots board
+  size: "9x9"
+  # Center-to-center spacing in meters.
+  # If first-to-ninth center span is 6mm on a 9-point row: 6 / (9-1) = 0.75mm -> 0.00075
+  square: 0.00075
+  no_service_check: true
+  # Topic remaps for cameracalibrator:
+  # For v4l2_camera_node, common topics are: /image_raw and /camera_info
+  remaps:
+    image: "/image_raw"
+
+tarball:
+  # cameracalibrator will write this after "Commit"
+  path: "/tmp/calibrationdata.tar.gz"
+
+output:
+  # Where to extract camera.yaml/ost.yaml from the tarball
+  dir: "data/calibration/ros2_intrinsic"
+  # Output yaml name inside `output.dir` (ost.yaml will be renamed to this)
+  extracted_yaml: "camera.yaml"
+  # Optional: also write backend-format YAML for this repo's Python calibration tools
+  backend_intrinsic_yaml: "config/calibration/camera_intrinsic.yaml"

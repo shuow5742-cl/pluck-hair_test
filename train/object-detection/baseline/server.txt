@@ -1,0 +1,24 @@
+ - configs/experiments/pluck/smoke/exp_orchestrator_yolov8n_pluck_smoke.yaml:
+    batch 256
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11n_pluck_smoke.yaml:
+    batch 256
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8s_pluck_smoke.yaml:
+    batch 160
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11s_pluck_smoke.yaml:
+    batch 160
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8m_pluck_smoke.yaml:
+    batch 96
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11m_pluck_smoke.yaml:
+    batch 96
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8l_pluck_smoke.yaml:
+    batch 48
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11l_pluck_smoke.yaml:
+    batch 48
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8x_pluck_smoke.yaml:
+    batch 40
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11x_pluck_smoke.yaml:
+    batch 40
+  - configs/experiments/pluck/smoke/exp_orchestrator_rtdetr_pluck_smoke.yaml:
+    batch 32
+
+

@@ -1,0 +1,26 @@
+[project]
+name = "baseline"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+    "numpy>=1.24.0",
+    "ultralytics>=8.3.227",
+    "sahi>=0.11.36",
+]
+
+[project.optional-dependencies]
+yolo = [
+    "ultralytics>=8.2.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.9",
+]
+
+[tool.uv.workspace]
+members = [
+    "dataset/AI-TODv2/AI-TOD/aitodtoolkit",
+]

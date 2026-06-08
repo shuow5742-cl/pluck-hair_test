@@ -1,0 +1,176 @@
+- name: smoke_yolov8n
+  description: smoke run for yolov8n
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8n_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolov8n
+  status: success
+- name: smoke_yolov8s
+  description: smoke run for yolov8s
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8s_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolov8s
+  status: success
+- name: smoke_yolov8m
+  description: smoke run for yolov8m
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8m_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 8
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolov8m
+  status: success
+- name: smoke_yolov8l
+  description: smoke run for yolov8l
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8l_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolov8l
+  status: success
+- name: smoke_yolov8x
+  description: smoke run for yolov8x
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolov8x_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolov8x
+  status: success
+- name: smoke_yolo11n
+  description: smoke run for yolo11n
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11n_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolo11n
+  status: success
+- name: smoke_yolo11s
+  description: smoke run for yolo11s
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11s_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolo11s
+  status: success
+- name: smoke_yolo11m
+  description: smoke run for yolo11m
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11m_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 8
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolo11m
+  status: success
+- name: smoke_yolo11l
+  description: smoke run for yolo11l
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11l_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolo11l
+  status: success
+- name: smoke_yolo11x
+  description: smoke run for yolo11x
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_yolo11x_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/yolo11x
+  status: pending
+- name: smoke_rtdetr
+  description: smoke run for rtdetr
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/smoke/exp_orchestrator_rtdetr_pluck_smoke.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/smoke/rtdetr
+  status: pending

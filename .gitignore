@@ -1,0 +1,23 @@
+**__pycache__/
+# Ignore database files anywhere in the repo
+*.db
+**/*.db
+# OMX runtime artifacts (logs / state / metrics)
+.omx/
+# Scratch directory — protocol drops, debug images, vendor datasheets,
+# experimental scripts. Nothing here is part of the build.
+tmp/
+
+# Segmentation / pick point test outputs
+backend/data/segmentation_outputs*/
+backend/data/review_*/
+
+# Labeled image datasets (large, not for tracking)
+backend/data/labeled/
+
+# Runtime logs — written on IPC at startup, rotated by RotatingFileHandler
+backend/logs/
+
+# Diagnostic snapshots written by tools/machine_result_snapshot.py at
+# every nova5 photo position. IPC-side only; large and noisy.
+backend/data/machine_result/

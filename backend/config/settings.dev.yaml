@@ -1,0 +1,116 @@
+# Development Configuration
+# =========================
+# Override settings for local development
+# No external dependencies (MinIO, PostgreSQL) required
+
+app:
+  log_level: "DEBUG"
+
+# Use mock camera for development without hardware
+camera:
+  # type: mock
+  # mode: directory  # random or directory
+  # width: 640
+  # height: 480
+  # image_dir: ./assets 
+  type: daheng
+  device_index: 1
+  exposure_time: 10000  # Exposure time in microseconds
+  white_balance_mode: once
+
+# Use local storage instead of MinIO
+storage:
+  images:
+    type: local
+    path: ./data/images
+  
+  # Use SQLite instead of PostgreSQL
+  database:
+    type: sqlite
+    path: ":memory:"
+    echo: false
+
+# Tile-based detection pipeline
+vision:
+  pipeline:
+    steps:
+      - name: tile
+        type: tile
+        params:
+          tile_size: 640
+          overlap: 0.2
+      - name: detect
+        type: yolo
+        params:
+          model: assets/best.pt
+          conf: 0.3  # Lower threshold for testing
+          device: auto  # Use GPU if available
+          batch_size: 16
+      - name: merge
+        type: merge_tiles
+        params:
+          iou_threshold: 0.1
+
+scheduler:
+  loop_delay_ms: 0  # Slower for debugging
+  save_images: false
+  save_annotated: false
+  show_preview: ${SCHEDULER_SHOW_PREVIEW:-true}  # Disable this in Docker runtime
+  task:
+    type: stabilized_detection
+    pick_process:
+      init_stable_threshold: 10
+      confirm_window_frames: 10      # CONFIRMING 阶段窗口帧数
+    calibration:
+      extrinsic_path: config/calibration/extrinsic.yaml
+      intrinsic_path: config/calibration/camera_intrinsic.yaml
+    # type: detection
+    # name: detection
+    # stabilizer:
+    #   window_size: 10
+    #   min_occurrence_ratio: 0.6
+    #   stable_exit_ratio: 0.3
+    #   min_frames_to_stable: 5
+    #   distance_threshold_px: 30.0
+    #   jump_threshold_px: 60.0
+    #   missing_frames_to_delete: 4
+    #   reset_on_jump: true
+    #   bbox_aggregation: iqr_median
+
+# Video stream (MJPEG)
+video_stream:
+  enabled: true
+  stream: "pluck:frames"
+  maxlen: 20
+  fps_limit: 10.0
+  jpeg_quality: 99
+  block_ms: 2000
+
+# Redis (optional in development; set enabled=true when running Redis locally)
+redis:
+  url: "redis://localhost:6379/0"
+  stream: "pluck:events"
+  consumer_group: "api"
+  consumer_name: "dev-api"
+  maxlen: 2000
+  read_count: 10
+  block_ms: 5000
+  enabled: true
+
+# Communication channels
+communication:
+  comm_signal:
+    type: redis  # redis | modbus
+    redis:
+      command_key: "pluck:control"
+      response_timeout: 5.0
+    modbus:
+      host: "127.0.0.1"
+      port: 502
+      unit_id: 1
+      timeout: 1.0
+
+# Workflow runtime (state machine)
+workflow:
+  enabled: false
+  path: "config/workflow.yaml"

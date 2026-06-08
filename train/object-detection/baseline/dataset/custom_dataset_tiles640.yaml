@@ -1,0 +1,8 @@
+path: /media/xinyuan/24649770C84E62F7/Users/admin/xanylabeling_data/trainer/ultralytics/datasets/detect/dataset_20251116_033931/tiles_640
+train: images/train
+val: images/val
+test: null
+nc: 2
+names:
+  0: debris
+  1: hair

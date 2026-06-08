@@ -1,0 +1,13 @@
+<svg width="1280" height="720" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mock video stream">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1323"/>
+      <stop offset="100%" stop-color="#111f37"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#g)"/>
+  <rect x="180" y="120" width="920" height="480" rx="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="4"/>
+  <text x="50%" y="50%" fill="#e5e7eb" font-size="42" font-family="sans-serif" font-weight="600" text-anchor="middle" dominant-baseline="middle">
+    模拟视频流 / Mock Video Stream
+  </text>
+</svg>

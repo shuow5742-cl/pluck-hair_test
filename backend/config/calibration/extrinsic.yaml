@@ -1,0 +1,20 @@
+calibration_date: '2026-05-21T10:04:50'
+mm_per_pixel: 0.009857
+T_cam_to_flange:
+  dx: -26.6809
+  dy: -21.3759
+# axis_mapping: how image-pixel displacement maps onto flange-frame mm.
+# Determined empirically on 2026-05-19: operator observed that
+#   flange X+ jog → scene point slides DOWN on screen
+#   flange Y+ jog → scene point slides RIGHT on screen
+# Scene point's screen motion is opposite to the camera's physical motion,
+# so flange X+ means the camera moves toward image -Y (screen up), which is
+# the same as saying "pixel displacement +py → flange X-". Hence -py for
+# flange X. Likewise flange Y+ means camera moves toward image -X, so
+# +px → flange Y- ⇒ flange Y from -px.
+axis_mapping:
+  flange_x_from: "-py"
+  flange_y_from: "-px"
+flip_y: false  # legacy field, ignored when axis_mapping is present
+calibration_note: crosshair-to-origin alignment; flange_xy at alignment = (26.6809,
+  21.3759) mm

@@ -1,0 +1,20 @@
+experiment:
+  name: yolo11x_smoke_pluck
+  framework: yolo
+  output_dir: experiments/pluck/smoke/yolo11x
+shared_resources:
+  datasets_root: .
+  weights_cache: models
+framework_cfg:
+  project_dir: frameworks/yolo
+  script: frameworks/yolo/scripts/train.py
+  args:
+    model: yolo11x.pt
+    data_yaml: dataset/pluck_subset150_tiles640.yaml
+    epochs: 2
+    batch: 8
+    imgsz: 640
+    device: 0
+    workers: 4
+    task_type: hbb
+    nbs: 64

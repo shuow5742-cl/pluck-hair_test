@@ -1,0 +1,29 @@
+experiment:
+  name: d2_frcnn_smoke
+  framework: detectron2
+  output_dir: experiments/d2_frcnn_smoke
+
+shared_resources:
+  datasets_root: dataset
+  weights_cache: models
+
+framework_cfg:
+  project_dir: frameworks/detectron2
+  script: frameworks/detectron2/scripts/train.py
+  args:
+    task_type: hbb
+    config:
+      base_config: COCO-Detection/faster_rcnn_R_50_FPN_1x.yaml
+    overrides:
+      SOLVER.MAX_ITER: 1
+      SOLVER.IMS_PER_BATCH: 1
+      MODEL.ROI_HEADS.NUM_CLASSES: 80
+    dataset:
+      name: coco8_smoke
+      train_json: coco8/annotations/instances_train.json
+      train_images: coco8/images/train
+      val_json: coco8/annotations/instances_val.json
+      val_images: coco8/images/val
+    trainer:
+      resume: false
+      eval_period: 0

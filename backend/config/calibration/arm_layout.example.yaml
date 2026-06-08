@@ -1,0 +1,71 @@
+# Multi-arm layout configuration example
+# ======================================
+# This file defines the spatial relationships between multiple robot arms.
+# This is not a "calibration" output; it is an installation/layout configuration.
+# Fill in values based on mechanical drawings or on-site measurement.
+
+# Reference frame notes
+# The world frame origin is at the center of the workbench.
+# X: along the tray long edge
+# Y: along the tray short edge
+# Z: upward
+
+# Robot arm layout
+arms:
+  # Vision arm (camera mounted)
+  vision_arm:
+    # Base position (relative to the world origin)
+    base_position:
+      x: 0.0       # mm
+      y: -400.0    # mm, in front of the tray
+      z: 0.0       # mm
+    # Base orientation (Euler XYZ)
+    base_orientation:
+      rx: 0.0      # deg
+      ry: 0.0
+      rz: 0.0      # facing the tray
+  
+  # Gripper arm (gripper mounted)
+  gripper_arm:
+    base_position:
+      x: 300.0     # mm, on the right side
+      y: -300.0
+      z: 0.0
+    base_orientation:
+      rx: 0.0
+      ry: 0.0
+      rz: -30.0    # slightly rotated toward the workspace
+  
+  # Pressing arm
+  pressure_arm:
+    base_position:
+      x: -300.0    # mm, on the left side
+      y: -300.0
+      z: 0.0
+    base_orientation:
+      rx: 0.0
+      ry: 0.0
+      rz: 30.0
+
+# Workspace
+workspace:
+  # Tray pose
+  tray:
+    center:
+      x: 0.0
+      y: 200.0
+      z: 50.0      # tray height
+    size:
+      length: 150.0  # mm
+      width: 100.0
+  
+  # Safety zone (motion limits)
+  safety_zone:
+    x_min: -500.0
+    x_max: 500.0
+    y_min: -100.0
+    y_max: 400.0
+    z_min: 0.0
+    z_max: 500.0
+
+

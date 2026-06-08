@@ -1,0 +1,15 @@
+workflow:
+  name: "segmentation_workflow_stable53"
+  initial: "idle"
+  states:
+    - idle
+    - running
+  transitions:
+    - trigger: "SYS:STARTED"
+      source: "idle"
+      dest: "running"
+  tasks:
+    running: "seg_pick_stabilized"
+  side_tasks:
+    - "pixel_to_world"
+    - "plc_orchestrator"

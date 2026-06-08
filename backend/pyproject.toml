@@ -1,0 +1,84 @@
+[project]
+name = "pluck-backend"
+version = "0.1.0"
+description = "Backend for Bird's Nest Inspection System"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Core
+    "numpy>=1.24.0",
+    "opencv-python>=4.8.0",
+    # Deep Learning
+    "ultralytics>=8.0.0",
+    "torch>=2.0.0",
+    # Database
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    # Object Storage
+    "minio>=7.1.0",
+    # API
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pydantic>=2.0.0",
+    "redis>=5.0.0",
+    # Config
+    "pyyaml>=6.0",
+    "iai-gxipy>=2.0.2407.9061",
+    "pymodbus>=3.11.4",
+    "autoweaver",
+    # autoweaver imports google.protobuf at runtime; uv would otherwise
+    # strip it on sync because no top-level package declares it. See
+    # docs/backend/lessons/01-corner0-mismatch.md for the IPC redeploy
+    # incident that surfaced this.
+    "protobuf>=7.34.1",
+]
+
+[project.scripts]
+dev-run = "src.entrypoints:dev_run"
+dev-api = "src.entrypoints:dev_api"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "ruff>=0.0.280",
+    "mypy>=1.4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.black]
+line-length = 88
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.uv.sources]
+autoweaver = { git = "https://github.com/Einstellung/AutoWeaver.git", rev = "55fd1d65e6687eb773bdc88138050ec3950e60b9" }
+
+# autoweaver pulls opencv-python-headless which has no GUI backend
+# (cv2.namedWindow / imshow raise NotImplemented). Override the transitive
+# dep so the GUI-enabled opencv-python wins for everyone in the env.
+[[tool.uv.dependency-metadata]]
+name = "autoweaver"
+version = "0.4.0"
+requires-dist = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "pymodbus>=3.11",
+    "pyyaml>=6",
+]

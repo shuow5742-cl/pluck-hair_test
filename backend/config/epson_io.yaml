@@ -1,0 +1,190 @@
+# =============================================================================
+# Epson LS6 manual-control + device-IO configuration  (pluck-hair_test)
+# =============================================================================
+#
+#  ⚠️  PLACEHOLDER COMMUNICATION MAP — TO BE FILLED IN ON SITE  ⚠️
+#
+#  The right-hand console (Epson manual jog/move + cylinder & utility IO) needs a
+#  field-bus link whose exact addresses are not yet decided. Every address /
+#  register / coil number below is INVENTED so the whole UI can be built and
+#  exercised today against the built-in `mock` backend. When the real PLC / Epson
+#  RC+ Modbus map is known, switch `backend: modbus`, point `modbus.host` at the
+#  controller, and correct the addresses — no code changes required.
+#
+#  Address convention used here (all invented):
+#    * Epson pose / target use 32-bit floats → 2 holding registers each.
+#    * Jog / motion command + mode use single holding registers.
+#    * IO writes & feedbacks are coils / discrete inputs (1 bit each).
+#  The %MXx.y tags echo the SENKE HMI screenshots for traceability only; map them
+#  to whatever Modbus coil the gateway actually exposes.
+# =============================================================================
+
+epson_io:
+  backend: mock            # mock | modbus   (mock = simulate, no hardware needed)
+
+  modbus:
+    host: "192.168.1.90"   # PLACEHOLDER — Epson / IO gateway address
+    port: 502
+    unit_id: 1
+    timeout_s: 1.0
+    word_order: "big"      # big | little  (float32 register pair order)
+    poll_ms: 200           # background pose/IO readback cadence
+
+  # ---------------------------------------------------------------------------
+  # Epson LS6 SCARA — 4 controllable axes (X, Y, Z linear mm; U rotation deg).
+  # ---------------------------------------------------------------------------
+  epson:
+    axes: ["X", "Y", "Z", "U"]
+    units: { X: "mm", Y: "mm", Z: "mm", U: "deg" }
+
+    # Current-pose readback (holding registers, float32 = 2 regs each).
+    pose_read:
+      X: { addr: 1000, type: float32 }
+      Y: { addr: 1002, type: float32 }
+      Z: { addr: 1004, type: float32 }
+      U: { addr: 1006, type: float32 }
+
+    # Target-pose write (holding registers, float32).
+    target_write:
+      X: { addr: 1100, type: float32 }
+      Y: { addr: 1102, type: float32 }
+      Z: { addr: 1104, type: float32 }
+      U: { addr: 1106, type: float32 }
+
+    # Motion command: pick Move (linear) or Go (PTP), then pulse the trigger.
+    command:
+      mode_addr: 1120
+      mode_values: { Move: 0, Go: 1 }      # Move = 直线, Go = 点到点
+      trigger_addr: 1121
+      trigger_value: 1                     # write to launch the queued target
+      busy_addr: 1122                      # discrete input: 1 while moving
+      done_addr: 1123                      # discrete input: 1 when in-position
+
+    # Jog (step teaching). The PLC nudges one step per command pulse.
+    jog:
+      command_addr: 1130
+      step_mode_addr: 1131
+      step_modes: { short: 0, medium: 1, long: 2, continuous: 3 }
+      # (axis,direction) -> command-register value written to command_addr
+      values:
+        "X+": 1
+        "X-": 2
+        "Y+": 3
+        "Y-": 4
+        "Z+": 5
+        "Z-": 6
+        "U+": 7
+        "U-": 8
+      # Step magnitudes the MOCK backend applies (and a reference for the PLC).
+      step_mm:  { short: 0.10, medium: 1.0, long: 10.0, continuous: 2.0 }
+      step_deg: { short: 0.10, medium: 1.0, long: 10.0, continuous: 2.0 }
+
+    # Soft limits (used by mock + as UI guard rails).
+    limits:
+      X: [-300.0, 300.0]
+      Y: [-300.0, 300.0]
+      Z: [0.0, 150.0]
+      U: [-360.0, 360.0]
+
+    # Taught points (示教点位). P0 mirrors the RC+ screenshot; rest are invented.
+    points:
+      - { name: "P0 : Home_pos",   X: 112.421, Y: -151.072, Z: 46.500, U: 60.252 }
+      - { name: "P1 : Pick_ready", X: 120.000, Y: -140.000, Z: 30.000, U: 60.000 }
+      - { name: "P2 : Photo_pos",  X: 130.500, Y: -120.250, Z: 46.500, U: 45.000 }
+      - { name: "P3 : Drop_pos",   X: 80.000,  Y: -180.000, Z: 25.000, U: 90.000 }
+      - { name: "P4 : Safe_high",  X: 112.421, Y: -151.072, Z: 120.000, U: 60.252 }
+
+  # ---------------------------------------------------------------------------
+  # Device IO.
+  #   cylinders : two-state pneumatics (伸出/收缩 or 打开/关闭 or 解锁/锁紧),
+  #               each with two proximity-switch feedbacks.
+  #   others    : start/stop utilities (启动/停止) with a single running feedback.
+  # ---------------------------------------------------------------------------
+  io:
+    cylinders:
+      - id: tray_clamp_right
+        name: "料盘右夹紧气缸"
+        plc_tag: "%MX3.0 / %MX3.1"
+        open_label: "伸出"
+        close_label: "收缩"
+        write:  { extend: { addr: 300, value: 1 }, retract: { addr: 301, value: 1 } }
+        feedback: { extended: { addr: 400 }, retracted: { addr: 401 } }
+
+      - id: tray_clamp_left
+        name: "料盘左夹紧气缸"
+        plc_tag: "%MX3.2 / %MX3.3"
+        open_label: "伸出"
+        close_label: "收缩"
+        write:  { extend: { addr: 302, value: 1 }, retract: { addr: 303, value: 1 } }
+        feedback: { extended: { addr: 402 }, retracted: { addr: 403 } }
+
+      - id: pluck_tool
+        name: "挑毛工具气缸"
+        plc_tag: "%MX3.4 / %MX3.5"
+        open_label: "伸出"
+        close_label: "收缩"
+        write:  { extend: { addr: 304, value: 1 }, retract: { addr: 305, value: 1 } }
+        feedback: { extended: { addr: 404 }, retracted: { addr: 405 } }
+
+      - id: quick_change
+        name: "快换机构"
+        plc_tag: "%MX3.6 / %MX3.7"
+        open_label: "解锁"
+        close_label: "锁紧"
+        write:  { extend: { addr: 306, value: 1 }, retract: { addr: 307, value: 1 } }
+        feedback: { extended: { addr: 406 }, retracted: { addr: 407 } }
+
+      - id: return_water_valve
+        name: "回水阀"
+        plc_tag: "%MX4.0"
+        open_label: "打开"
+        close_label: "关闭"
+        write:  { extend: { addr: 308, value: 1 }, retract: { addr: 309, value: 1 } }
+        feedback: { extended: { addr: 408 }, retracted: { addr: 409 } }
+
+      - id: vacuum_blow
+        name: "真空/吹气"
+        plc_tag: "%MX4.2 / %MX4.3"
+        open_label: "伸出"
+        close_label: "收缩"
+        write:  { extend: { addr: 310, value: 1 }, retract: { addr: 311, value: 1 } }
+        feedback: { extended: { addr: 410 }, retracted: { addr: 411 } }
+
+      - id: spare_1
+        name: "备用"
+        plc_tag: "%MX4.4 / %MX4.5"
+        open_label: "伸出"
+        close_label: "收缩"
+        write:  { extend: { addr: 312, value: 1 }, retract: { addr: 313, value: 1 } }
+        feedback: { extended: { addr: 412 }, retracted: { addr: 413 } }
+
+    others:
+      - id: flush_pump
+        name: "冲水泵"
+        plc_tag: "%MX5.0"
+        open_label: "启动"
+        close_label: "停止"
+        write:  { start: { addr: 500, value: 1 }, stop: { addr: 500, value: 0 } }
+        feedback: { running: { addr: 600 } }
+
+      - id: ultrasonic
+        name: "超声波"
+        plc_tag: "%MX6.0"
+        open_label: "启动"
+        close_label: "停止"
+        write:  { start: { addr: 501, value: 1 }, stop: { addr: 501, value: 0 } }
+        feedback: { running: { addr: 601 } }
+
+  # ---------------------------------------------------------------------------
+  # System control buttons (自动 / 初始化 / 启动 / 停止 / 暂停 / 复位 / 人工挑毛OK).
+  # Each pulses a coil; `state_addr` (optional) reads back a lamp/mode bit.
+  # ---------------------------------------------------------------------------
+  system:
+    buttons:
+      auto:           { name: "自动",      addr: 700, value: 1, state_addr: 800 }
+      init:           { name: "初始化",    addr: 701, value: 1, state_addr: 801 }
+      start:          { name: "启动",      addr: 702, value: 1, state_addr: 802 }
+      stop:           { name: "停止",      addr: 703, value: 1, state_addr: 803 }
+      pause:          { name: "暂停",      addr: 704, value: 1, state_addr: 804 }
+      reset:          { name: "复位",      addr: 705, value: 1, state_addr: 805 }
+      manual_pick_ok: { name: "人工挑毛OK", addr: 706, value: 1 }

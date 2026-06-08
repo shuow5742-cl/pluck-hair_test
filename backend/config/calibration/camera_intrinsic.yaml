@@ -1,0 +1,18 @@
+# Scaled from 1280x960 calibration to 2048x1536 (factor 1.6)
+calibration_date: '2026-03-03T14:38:53.011538'
+num_images: 0
+image_size:
+  width: 2048
+  height: 1536
+camera_matrix:
+  fx: 37399.8571
+  fy: 37462.6278
+  cx: 1023.1584
+  cy: 766.2959
+distortion:
+  k1: -0.727947
+  k2: 216.063172
+  p1: -0.014246
+  p2: -0.008805
+  k3: 0.0
+reprojection_error_px: -1.0

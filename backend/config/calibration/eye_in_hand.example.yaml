@@ -1,0 +1,51 @@
+# Eye-in-Hand calibration example
+# ===============================
+# This file is a template. After calibration, a real `eye_in_hand.yaml` will be generated.
+#
+# Calibration:
+#   python -m tools.calibrate.eye_in_hand \
+#       --data data/calibration/eye_in_hand/ \
+#       --intrinsic config/calibration/camera_intrinsic.yaml \
+#       --pattern circle \
+#       --grid 11,11 \
+#       --spacing 1.0 \
+#       --output config/calibration/eye_in_hand.yaml
+
+# Calibration timestamp
+calibration_date: "2025-12-15T10:30:00"
+
+# Number of poses used
+num_poses: 15
+
+# Method
+# Options: tsai, park, horaud, andreff, daniilidis
+method: tsai
+
+# Calibration error
+reprojection_error: 0.5
+
+# Transform from camera frame → end-effector frame
+# `T_cam_to_ee` transforms points from the camera frame into the end-effector frame.
+T_cam_to_ee:
+  # Translation (mm)
+  position:
+    x: 15.0
+    y: -8.0
+    z: 45.0
+  
+  # Orientation (Euler XYZ, deg)
+  orientation:
+    rx: 0.5
+    ry: -1.2
+    rz: 178.5
+  
+  # Rotation matrix (3x3)
+  rotation_matrix:
+    - [0.9998, 0.0175, -0.0087]
+    - [-0.0174, 0.9998, 0.0122]
+    - [0.0089, -0.0120, 0.9999]
+  
+  # Translation vector (mm)
+  translation: [15.0, -8.0, 45.0]
+
+

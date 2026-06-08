@@ -1,0 +1,18 @@
+workflow:
+  name: "mock_workflow"
+  initial: "idle"
+  states:
+    - idle
+    - running
+  transitions:
+    - trigger: "SYS:STARTED"
+      source: "idle"
+      dest: "running"
+    - trigger: "TASK:DONE"
+      source: "running"
+      dest: "idle"
+  tasks:
+    running: "stabilized_detection"
+    # idle 没有映射 → Engine 跳过帧处理
+  side_tasks:
+    - "communication"

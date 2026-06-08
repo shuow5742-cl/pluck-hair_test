@@ -1,0 +1,145 @@
+# Live rig configuration — full chain end-to-end, with 5-frame / 1-hit gating
+# before seg picks are allowed downstream.
+#
+# Rollback: switch back to config/settings.live.yaml.
+#
+# Run:
+#   uv run python main.py --config config/settings.live.seg_stable53.yaml --mode run
+
+app:
+  name: "pluck-backend-live-seg-stable53"
+  version: "0.1.0"
+  log_level: "INFO"
+
+camera:
+  type: daheng
+  device_sn: FCM26010005
+  exposure_auto: false
+  gain_auto: false
+  exposure_time: 20000
+  white_balance_mode: auto
+
+storage:
+  images:
+    type: local
+    path: ./data/images
+  database:
+    type: sqlite
+    path: ":memory:"
+    echo: false
+
+vision:
+  pipeline:
+    steps:
+      - name: crop_square
+        type: crop_single_square
+        params:
+          mm_per_pixel: 0.009857
+          cell_size_mm: 10.0
+          chamfer_mm: 0.5
+          frame_mm: 0.5
+          metal_threshold: 100
+          center_bias: 0.15
+          min_match_score: 0.40
+          border_px: 176
+          fallback_side_px: 1100
+      - name: segment
+        type: yolo_seg
+        params:
+          model: assets/yanwo_exp030_best_598img_bubble.pt
+          conf: 0.25
+          iou: 0.3
+          imgsz: 640
+          device: auto
+          tool_assignment_long_edge_px: 100.0
+          output_dir: data/segmentation_outputs
+          save_artifacts: false
+      - name: abstain
+        type: abstain_near_metal
+        params:
+          safety_margin_px: 152
+          enforce_safe_box: true
+          require_trusted_crop: true
+          trusted_match_score: 0.48
+          edge_strip_px: 18
+          edge_dark_max_gray: 110
+          edge_contrast_min: 18
+          min_dark_edge_pass_count: 3
+
+scheduler:
+  loop_delay_ms: 200
+  max_errors: 10
+  save_images: false
+  save_annotated: false
+  show_preview: true
+  task:
+    type: seg_pick_stabilized
+    stabilizer:
+      window_size: 1
+      min_occurrence_ratio: 1.0
+      stable_exit_ratio: 1.0
+      min_frames_to_stable: 1
+      distance_threshold_px: 30.0
+      jump_threshold_px: 60.0
+      missing_frames_to_delete: 4
+      reset_on_jump: true
+      bbox_aggregation: iqr_median
+    calibration:
+      extrinsic_path: config/calibration/extrinsic.yaml
+      intrinsic_path: config/calibration/camera_intrinsic.yaml
+      pose_source: plc
+
+video_stream:
+  enabled: false
+
+http_image_upload:
+  enabled: true
+  url: http://192.168.1.59:8088/upload
+  robot: Nova5
+  connect_timeout_s: 2.0
+  upload_timeout_s: 5.0
+  retry_count: 1
+  queue_size: 32
+
+redis:
+  enabled: false
+
+communication: {}
+
+plc_orchestrator:
+  enabled: true
+  host: 192.168.1.88
+  port: 502
+  unit_id: 1
+  poll_ms: 250
+  heartbeat_ms: 1000
+  word_order: LOW_WORD_FIRST
+  code_mode: U16_AS_FLOAT
+  compare_epsilon: 0.001
+  echo_wait_ms: 3000
+  points_path: config/plc_points.yaml
+  start_press_row: 5
+  start_press_index: 1
+  auto_start: true
+  epson_offset_x_mm: -0.081
+  epson_offset_y_mm: 0.559
+  epson_tweezer_z_mm: 11.5
+  epson_tweezer_z_retry2_offset_mm: 0.5
+  epson_tweezer_z_retry3_offset_mm: 0.5
+  epson_suction_z_mm: 13
+  epson_suction_z_retry2_offset_mm: 0.5
+  epson_suction_z_retry3_offset_mm: 0.5
+  epson_tool2_offset_x_mm: -0.679
+  epson_tool2_offset_y_mm: 10.853
+  epson_tool2_offset_z_mm: -4.423
+  epson_u_min_deg: 30.0
+  epson_u_max_deg: 110.0
+  pick_confirm_match_distance_px: 30.0
+  pick_confirm_match_size_ratio: 0.3
+  nova5_to_epson_mapping:
+    enabled: true
+    path: config/nova5_to_epson_grid.yaml
+
+workflow:
+  enabled: true
+  path: "config/workflow.seg_stable53.yaml"

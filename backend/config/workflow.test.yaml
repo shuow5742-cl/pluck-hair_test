@@ -1,0 +1,18 @@
+# Test-console workflow — identical detection chain to seg_stable53, used by
+# `--mode test`. plc_orchestrator stays in the chain so the real-rig photo→
+# detect flow is unchanged; it is skipped automatically when the PLC is absent.
+workflow:
+  name: "segmentation_workflow_test"
+  initial: "idle"
+  states:
+    - idle
+    - running
+  transitions:
+    - trigger: "SYS:STARTED"
+      source: "idle"
+      dest: "running"
+  tasks:
+    running: "seg_pick_stabilized"
+  side_tasks:
+    - "pixel_to_world"
+    - "plc_orchestrator"

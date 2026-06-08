@@ -1,0 +1,45 @@
+services:
+  backend:
+    image: ${BACKEND_BASE_IMAGE:-pluck/backend-base:cu128}
+    container_name: pluck-backend
+    working_dir: /workspace/backend
+    command: ["python", "main.py", "--mode", "run", "--config", "config/settings.dev.yaml"]
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    gpus: all
+    depends_on:
+      - postgres
+      - minio
+      - redis
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DISPLAY: "${DISPLAY:-:0}"
+      QT_X11_NO_MITSHM: "1"
+      SCHEDULER_SHOW_PREVIEW: "${SCHEDULER_SHOW_PREVIEW:-true}"
+    volumes:
+      - ./:/workspace/backend
+      - /dev/bus/usb:/dev/bus/usb
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+      - /usr/lib/libgxiapi.so:/usr/lib/libgxiapi.so:ro
+      - /usr/lib/liblog4cplus_gx.so:/usr/lib/liblog4cplus_gx.so:ro
+      - /usr/lib/GxU3VTL.cti:/usr/lib/GxU3VTL.cti:ro
+      - /usr/lib/GxGVTL.cti:/usr/lib/GxGVTL.cti:ro
+      - /etc/Galaxy:/etc/Galaxy:ro
+
+  backend-api:
+    image: ${BACKEND_BASE_IMAGE:-pluck/backend-base:cu128}
+    container_name: pluck-backend-api
+    working_dir: /workspace/backend
+    command: ["python", "main.py", "--mode", "api", "--config", "config/settings.dev.yaml"]
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - minio
+      - redis
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./:/workspace/backend

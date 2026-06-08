@@ -1,0 +1,207 @@
+# =============================================================================
+# pluck-hair_test — single-process TEST CONSOLE configuration
+# =============================================================================
+#
+# Runs the full left-half detection chain (same as settings.live.seg_stable53)
+# PLUS the new tweezer-tip overlay, and serves the split UI in one process:
+#
+#   cd backend && uv run python main.py --config config/settings.test.yaml --mode test
+#
+# Then open the frontend (frontend/  →  deno task dev) which talks to this
+# backend on :8000. Left half = live camera + 异物 detection + tweezer cross;
+# right half = Epson manual control + device IO (driven by config/epson_io.yaml).
+#
+# Differences vs the live config:
+#   * video_stream.enabled: true  → frames go to the in-process FrameBus (MJPEG
+#     without Redis); redis stays disabled.
+#   * show_preview: false         → no local OpenCV window; the UI is the browser.
+#   * tweezer:  enabled           → real-time tweezer-tip detection + distance.
+#   * epson_io: enabled           → right-half console (mock backend by default).
+# =============================================================================
+
+app:
+  name: "pluck-hair-test-console"
+  version: "0.1.0"
+  log_level: "INFO"
+
+camera:
+  type: daheng
+  device_sn: FCM26010005
+  exposure_auto: false
+  gain_auto: false
+  exposure_time: 20000
+  white_balance_mode: auto
+
+storage:
+  images:
+    type: local
+    path: ./data/images
+  database:
+    type: sqlite
+    path: ":memory:"
+    echo: false
+
+vision:
+  pipeline:
+    steps:
+      - name: crop_square
+        type: crop_single_square
+        params:
+          mm_per_pixel: 0.009857
+          cell_size_mm: 10.0
+          chamfer_mm: 0.5
+          frame_mm: 0.5
+          metal_threshold: 100
+          center_bias: 0.15
+          min_match_score: 0.40
+          border_px: 176
+          fallback_side_px: 1100
+      - name: segment
+        type: yolo_seg
+        params:
+          model: assets/yanwo_exp030_best_598img_bubble.pt
+          conf: 0.25
+          iou: 0.3
+          imgsz: 640
+          device: auto
+          tool_assignment_long_edge_px: 100.0
+          output_dir: data/segmentation_outputs
+          save_artifacts: false
+      - name: abstain
+        type: abstain_near_metal
+        params:
+          safety_margin_px: 152
+          enforce_safe_box: true
+          require_trusted_crop: true
+          trusted_match_score: 0.48
+          edge_strip_px: 18
+          edge_dark_max_gray: 110
+          edge_contrast_min: 18
+          min_dark_edge_pass_count: 3
+
+scheduler:
+  loop_delay_ms: 100            # faster tick than live so the tweezer tracks smoothly
+  max_errors: 10
+  save_images: false
+  save_annotated: false
+  show_preview: false           # UI is the browser, not a local OpenCV window
+  task:
+    type: seg_pick_stabilized
+    stabilizer:
+      window_size: 1
+      min_occurrence_ratio: 1.0
+      stable_exit_ratio: 1.0
+      min_frames_to_stable: 1
+      distance_threshold_px: 30.0
+      jump_threshold_px: 60.0
+      missing_frames_to_delete: 4
+      reset_on_jump: true
+      bbox_aggregation: iqr_median
+    calibration:
+      extrinsic_path: config/calibration/extrinsic.yaml
+      intrinsic_path: config/calibration/camera_intrinsic.yaml
+      pose_source: plc
+
+# -----------------------------------------------------------------------------
+# Tweezer-tip detection (NEW). All values feed TweezerConfig — field-tune freely.
+# Use debug_dump_dir to capture mask/overlay PNGs while calibrating on real frames.
+# -----------------------------------------------------------------------------
+tweezer:
+  enabled: true
+  # Adaptive dark segmentation: tweezer = gray < (background_p80 − dark_margin).
+  # Tracks the blade across focus, incl. severe defocus where a fixed cut fails.
+  seg_method: dark_adaptive
+  bg_percentile: 80
+  dark_margin: 26               # raise to grab fainter (more defocused) blades
+  blur_ksize: 5
+  morph_open_ksize: 5           # strip debris so only the tweezer survives
+  morph_close_ksize: 15         # fill the blade body
+  min_area_px: 3000
+  min_area_px_defocus: 1500     # relaxed floor for faint defocused blades
+  max_area_ratio: 0.60
+  require_border_touch: true
+  entry_side: right             # the tweezer enters from the right; set "auto" to infer
+  open_min_gap_px: 38.0         # branch-tip separation above which it is labelled "open"
+  open_two_blob_min_ratio: 0.20 # 2nd blob area / 1st to fold a separated blade into the mask
+  lead_slab_px: 140.0           # forward region used to split upper/lower blade branches
+  tip_avg_depth_px: 6.0         # average depth from each branch's leading edge
+  line_fit_depth_px: 220.0      # forward depth used to fit blade axis lines in open state
+  open_pick_ratio: 0.32         # calibrated from the same-pose open/closed pair
+  open_forward_ratio: 0.02      # tiny forward nudge after the asymmetric line pick
+  open_forward_max_px: 8.0
+  open_tip_max_backtrack_px: 18.0
+  open_tip_max_lateral_drift_px: 18.0
+  open_contour_tip_front_band_px: 20.0
+  open_contour_tip_darkness_weight: 1.2
+  support_bin_width_px: 8.0
+  support_front_exclude_px: 8.0
+  # The marker is the SEAM END = centre of the forward tip region (the groove
+  # where the blades converge = where the tip lands once closed). tip_slab_px is
+  # how deep that forward region is averaged over.
+  tip_slab_px: 45.0
+  ema_alpha: 0.5                # temporal smoothing of the tip
+  max_jump_px: 280.0
+  miss_hold_frames: 3
+  mm_per_pixel: 0.009857        # telecentric scale → tip↔pick distance in mm
+  cross_color_bgr: [255, 0, 255]  # vivid magenta cross
+  cross_size: 18                # matches the foreign-object pick cross
+  cross_thickness: 2
+  # debug_dump_dir: data/tweezer_debug
+
+# -----------------------------------------------------------------------------
+# Right-half console: Epson manual control + device IO (NEW).
+# -----------------------------------------------------------------------------
+epson_io:
+  enabled: true
+  path: config/epson_io.yaml
+
+video_stream:
+  enabled: true                 # publish annotated frames to the in-process FrameBus
+  fps_limit: 20.0
+  jpeg_quality: 80
+
+http_image_upload:
+  enabled: false
+
+redis:
+  enabled: false
+
+communication: {}
+
+plc_orchestrator:
+  enabled: true
+  host: 192.168.1.88
+  port: 502
+  unit_id: 1
+  poll_ms: 250
+  heartbeat_ms: 1000
+  word_order: LOW_WORD_FIRST
+  code_mode: U16_AS_FLOAT
+  compare_epsilon: 0.001
+  echo_wait_ms: 3000
+  points_path: config/plc_points.yaml
+  start_press_row: 5
+  start_press_index: 1
+  auto_start: true
+  epson_offset_x_mm: -0.081
+  epson_offset_y_mm: 0.559
+  epson_tweezer_z_mm: 11.5
+  epson_tweezer_z_retry2_offset_mm: 0.5
+  epson_tweezer_z_retry3_offset_mm: 0.5
+  epson_suction_z_mm: 13
+  epson_suction_z_retry2_offset_mm: 0.5
+  epson_suction_z_retry3_offset_mm: 0.5
+  epson_tool2_offset_x_mm: -0.679
+  epson_tool2_offset_y_mm: 10.853
+  epson_tool2_offset_z_mm: -4.423
+  epson_u_min_deg: 30.0
+  epson_u_max_deg: 110.0
+  pick_confirm_match_distance_px: 30.0
+  pick_confirm_match_size_ratio: 0.3
+  nova5_to_epson_mapping:
+    enabled: true
+    path: config/nova5_to_epson_grid.yaml
+
+workflow:
+  enabled: true
+  path: "config/workflow.test.yaml"

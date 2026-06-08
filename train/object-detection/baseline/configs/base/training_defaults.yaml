@@ -1,0 +1,9 @@
+training:
+  epochs: 10
+  batch: 8
+  imgsz: 640
+  device: auto
+  workers: 4
+  project: experiments
+  name: default_run
+  seed: 42

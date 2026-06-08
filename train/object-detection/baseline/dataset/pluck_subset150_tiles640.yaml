@@ -1,0 +1,7 @@
+path: ./pluck_11-18_subset150_yolo/tiles_640
+train: images/train
+val: images/val
+test: null
+nc: 1
+names:
+  0: debris

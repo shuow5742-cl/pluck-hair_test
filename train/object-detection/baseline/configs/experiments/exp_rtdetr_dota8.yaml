@@ -1,0 +1,21 @@
+experiment:
+  name: rtdetr_l_dota8_smoke
+  framework: yolo
+  output_dir: experiments/rtdetr_l_dota8_smoke
+
+shared_resources:
+  datasets_root: .
+  weights_cache: models
+
+framework_cfg:
+  project_dir: frameworks/yolo
+  script: frameworks/yolo/scripts/train.py
+  args:
+    model: rtdetr-l.pt
+    data_yaml: dataset/dota8/dota8.yaml
+    epochs: 1
+    batch: 4
+    imgsz: 640
+    device: 0
+    workers: 4
+    task_type: hbb

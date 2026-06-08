@@ -1,0 +1,50 @@
+# Camera intrinsic calibration example
+# ====================================
+# This file is a template. After calibration, a real `camera_intrinsic.yaml` will be generated.
+#
+# Calibration:
+#   python -m tools.calibrate.intrinsic \
+#       --images data/calibration/intrinsic/ \
+#       --pattern circle \
+#       --grid 11,11 \
+#       --spacing 1.0 \
+#       --output config/calibration/camera_intrinsic.yaml
+
+# Calibration timestamp
+calibration_date: "2026-03-03T14:38:53"
+
+# Number of images used
+num_images: 0
+
+# Image size (2048x1536, scaled from 1280x960 calibration x1.6)
+image_size:
+  width: 2048
+  height: 1536
+
+# Camera intrinsic matrix
+# | fx  0   cx |
+# | 0   fy  cy |
+# | 0   0   1  |
+camera_matrix:
+  fx: 37399.8571    # focal length in X (px)
+  fy: 37462.6278    # focal length in Y (px)
+  cx: 1023.1584     # principal point X (px)
+  cy: 766.2959      # principal point Y (px)
+
+# Distortion coefficients
+# Radial: k1, k2, k3
+# Tangential: p1, p2
+distortion:
+  k1: -0.727947
+  k2: 216.063172
+  p1: -0.014246
+  p2: -0.008805
+  k3: 0.0
+
+# Reprojection error (px)
+# < 0.3: excellent
+# < 0.5: good
+# < 1.0: acceptable
+# > 1.0: recalibration recommended
+reprojection_error_px: -1.0
+

@@ -1,0 +1,33 @@
+experiment:
+  name: d2_faster_rcnn_coco8
+  framework: detectron2
+  output_dir: experiments/d2_faster_rcnn_coco8
+
+shared_resources:
+  datasets_root: dataset
+  weights_cache: models
+
+framework_cfg:
+  project_dir: frameworks/detectron2
+  script: frameworks/detectron2/scripts/train.py
+  args:
+    task_type: hbb
+    config:
+      base_config: COCO-Detection/faster_rcnn_R_50_FPN_1x.yaml
+      weights: faster_rcnn_R_50_FPN_1x.pkl
+    overrides:
+      SOLVER.MAX_ITER: 200
+      SOLVER.IMS_PER_BATCH: 2
+      SOLVER.BASE_LR: 0.001
+      MODEL.ROI_HEADS.NUM_CLASSES: 80
+    dataset:
+      name: coco8
+      train_json: coco8/annotations/instances_train.json
+      train_images: coco8/images/train
+      val_json: coco8/annotations/instances_val.json
+      val_images: coco8/images/val
+    trainer:
+      resume: false
+      eval_period: 50
+      amp: true
+      seed: 42

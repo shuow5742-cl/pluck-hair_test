@@ -1,0 +1,176 @@
+- name: full_yolov8n
+  description: full run for yolov8n
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolov8n_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolov8n
+  status: success
+- name: full_yolov8s
+  description: full run for yolov8s
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolov8s_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolov8s
+  status: success
+- name: full_yolov8m
+  description: full run for yolov8m
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolov8m_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 8
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolov8m
+  status: success
+- name: full_yolov8l
+  description: full run for yolov8l
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolov8l_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolov8l
+  status: success
+- name: full_yolov8x
+  description: full run for yolov8x
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolov8x_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolov8x
+  status: success
+- name: full_yolo11n
+  description: full run for yolo11n
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolo11n_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolo11n
+  status: success
+- name: full_yolo11s
+  description: full run for yolo11s
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolo11s_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 6
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolo11s
+  status: success
+- name: full_yolo11m
+  description: full run for yolo11m
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolo11m_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 8
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolo11m
+  status: success
+- name: full_yolo11l
+  description: full run for yolo11l
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolo11l_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolo11l
+  status: success
+- name: full_yolo11x
+  description: full run for yolo11x
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_yolo11x_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/yolo11x
+  status: pending
+- name: full_rtdetr
+  description: full run for rtdetr
+  command:
+  - uv
+  - run
+  - python
+  - orchestrator/scripts/train.py
+  - --config
+  - configs/experiments/pluck/full/exp_orchestrator_rtdetr_pluck_full_150.yaml
+  device:
+  - 0
+  min_free_mem_gb: 10
+  max_retries: 1
+  retry_interval_sec: 120
+  output_dir: experiments/pluck/full/rtdetr
+  status: pending

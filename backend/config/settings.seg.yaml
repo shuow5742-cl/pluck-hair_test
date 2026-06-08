@@ -1,0 +1,119 @@
+# Segmentation static-image / video-stream test configuration.
+#
+# - Mock camera in directory mode reads frames from backend/assets/.
+# - Vision pipeline is a single yolo_seg step that runs YOLOv8m-seg and
+#   estimates a pick point per detection.
+# - Storage is local + sqlite in-memory so no MinIO/Postgres is required.
+# - SegPickTask consumes the segmentation pipeline output, isolates the
+#   SegDetection list, and broadcasts per-target pick payloads (image-space
+#   pick_point_xy + pick_angle_deg + pick_safe + shape_class). Coordinate
+#   transform is a separate downstream task wired in a later config.
+
+app:
+  name: "pluck-backend-seg"
+  version: "0.1.0"
+  log_level: "INFO"
+
+camera:
+  type: mock
+  mode: directory
+  image_dir: ./data/labeled/05.15_4_2
+  width: 2048
+  height: 1536
+
+storage:
+  images:
+    type: local
+    path: ./data/images
+  database:
+    type: sqlite
+    path: ":memory:"
+    echo: false
+
+vision:
+  pipeline:
+    steps:
+      - name: crop_square
+        type: crop_single_square
+        params:
+          # Telecentric lens calibration; cell is 10x10 mm with ~0.5 mm
+          # chamfered corners and a ~0.5 mm metal collar between cells.
+          mm_per_pixel: 0.009857
+          cell_size_mm: 10.0
+          chamfer_mm: 0.5
+          frame_mm: 0.5
+          # Anything darker than this gray level is treated as metal. Cell
+          # interior pixels are usually >120; metal pixels <60.
+          metal_threshold: 100
+          # Mild center bias breaks ties between equally-good matches in
+          # favor of the candidate nearest the frame center, since the
+          # camera always physically frames its target near center.
+          center_bias: 0.15
+          # Below this normalized match score we fall back to a centered
+          # 1100 px box. Real successful matches typically score >0.7.
+          min_match_score: 0.40
+          border_px: 176
+          fallback_side_px: 1100
+      - name: segment
+        type: yolo_seg
+        params:
+          model: assets/best_foreigh_segment_yolov8m_seg.pt
+          conf: 0.25
+          iou: 0.45
+          imgsz: 640
+          device: auto
+          output_dir: data/segmentation_outputs
+          save_artifacts: true
+      - name: abstain
+        type: abstain_near_metal
+        params:
+          # 1.5 mm safety band along every edge of the cell (mm_per_pixel
+          # = 0.009857). Detections whose pick point sits within this band
+          # of any metal pixel are abstained, so the picker won't approach
+          # the press plate. This is the gripper-vs-plate clearance, NOT
+          # the segmentation crop margin.
+          safety_margin_px: 152
+
+scheduler:
+  loop_delay_ms: 500
+  max_errors: 10
+  save_images: false
+  save_annotated: false
+  show_preview: false
+  task:
+    type: seg_pick
+    calibration:
+      extrinsic_path: config/calibration/extrinsic.yaml
+      intrinsic_path: config/calibration/camera_intrinsic.yaml
+      pose_source: default
+
+video_stream:
+  enabled: false
+
+redis:
+  enabled: false
+
+communication: {}
+
+# Modbus TCP 3-arm orchestrator. Disabled by default — flip `enabled: true`
+# when running on the rig where PLC + nova2/nova5/epson_ls6 are reachable.
+# Register layout defaults match the PLC program used by the validated
+# standalone test GUI `plc_modbus_auto_test_gui_v2_strict.py`; override
+# `registers:` only if the PLC engineer moves a block.
+plc_orchestrator:
+  enabled: false
+  host: 192.168.1.88
+  port: 502
+  unit_id: 1
+  poll_ms: 250
+  heartbeat_ms: 1000
+  word_order: LOW_WORD_FIRST
+  code_mode: U16_AS_FLOAT
+  compare_epsilon: 0.001
+  echo_wait_ms: 3000
+  points_path: config/plc_points.yaml
+  auto_start: true
+
+workflow:
+  enabled: true
+  path: "config/workflow.seg.yaml"

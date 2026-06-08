@@ -1,0 +1,172 @@
+# Pluck Backend Configuration
+# ============================
+
+# Application settings
+app:
+  name: "pluck-backend"
+  version: "0.1.0"
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# Camera settings
+camera:
+  # Camera type: daheng, mock
+  type: daheng
+  
+  # Device index (1-based for Daheng cameras)
+  device_index: 1
+  
+  # Auto exposure/gain
+  exposure_auto: false
+  gain_auto: false
+  
+  # Manual exposure time in microseconds (optional)
+  # exposure_time: 10000
+  
+  # Manual gain value (optional)
+  # gain: 1.0
+
+  # White balance (optional)
+  # Modes: auto, once, manual, off
+  white_balance_mode: once
+  # Manual white balance gains (only used when mode=manual)
+  # white_balance_red: 1.0
+  # white_balance_green: 1.0
+  # white_balance_blue: 1.0
+
+  # Gamma (optional)
+  # gamma_enable: true
+  # gamma_value: 1.0  # range depends on camera, e.g., 0.1~10
+
+# Vision pipeline settings
+vision:
+  pipeline:
+    steps:
+      # Step 1: Slice image into overlapping tiles
+      - name: tile
+        type: tile
+        params:
+          tile_size: 640
+          overlap: 0.2
+      
+      # Step 2: YOLO detection on each tile
+      - name: detect
+        type: yolo
+        params:
+          model: models/best.pt
+          conf: 0.5
+          iou: 0.45
+          device: auto  # auto, cuda, cpu
+          half: false
+          batch_size: 4  # Process tiles in batches
+      
+      # Step 3: Merge tile detections back to original coordinates
+      - name: merge
+        type: merge_tiles
+        params:
+          iou_threshold: 0.5
+      
+      # Step 4: Post-processing filter
+      - name: postprocess
+        type: filter
+        params:
+          min_confidence: 0.3
+
+# Storage settings
+storage:
+  # Image storage (MinIO)
+  images:
+    # Storage type: minio, local
+    type: minio
+    
+    # MinIO settings
+    endpoint: "localhost:9000"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "pluck-images"
+    secure: false
+    
+    # For local storage (development)
+    # type: local
+    # path: ./data/images
+  
+  # Database (PostgreSQL)
+  database:
+    # Database type: postgres
+    type: postgres
+    connection_string: "postgresql://pluck:pluck123@localhost:5432/pluck"
+    
+    # Connection pool settings
+    pool_size: 5
+    echo: false  # Echo SQL (for debugging)
+
+# Scheduler settings
+scheduler:
+  # Delay between frames in milliseconds
+  loop_delay_ms: 100
+  
+  # Maximum consecutive errors before stopping
+  max_errors: 10
+
+  # Save raw images and detection records
+  save_images: true
+  
+  # Save annotated images with detection boxes
+  save_annotated: true
+  
+  # Task selection
+  task:
+    type: stabilized_detection
+    # type: detection
+    calibration:
+      extrinsic_path: config/calibration/extrinsic.yaml
+      intrinsic_path: config/calibration/camera_intrinsic.yaml
+
+# Video stream (MJPEG)
+video_stream:
+  enabled: true
+  stream: "pluck:frames"
+  maxlen: 50
+  fps_limit: 15.0
+  jpeg_quality: 80
+  block_ms: 2000
+
+# Redis (for real-time event streaming)
+redis:
+  url: "redis://localhost:6379/0"
+  stream: "pluck:events"
+  consumer_group: "api"
+  consumer_name: "api-1"
+  maxlen: 10000
+  read_count: 10
+  block_ms: 5000
+  enabled: true
+
+# Communication channels
+communication:
+  comm_signal:
+    type: redis  # redis | modbus
+    redis:
+      command_key: "pluck:control"
+      response_timeout: 5.0
+    modbus:
+      host: "127.0.0.1"
+      port: 502
+      unit_id: 1
+      timeout: 1.0
+
+# Workflow runtime (state machine)
+workflow:
+  enabled: false
+  path: "config/workflow.yaml"
+
+# API settings (for API server mode)
+api:
+  host: "0.0.0.0"
+  port: 8000
+  
+  # CORS settings
+  cors:
+    allow_origins: ["*"]
+    allow_credentials: true
+    allow_methods: ["*"]
+    allow_headers: ["*"]

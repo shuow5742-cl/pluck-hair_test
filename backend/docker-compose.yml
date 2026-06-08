@@ -1,0 +1,66 @@
+# Docker Compose for Pluck Backend Services
+# ==========================================
+# Provides MinIO (object storage) and PostgreSQL (database)
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: pluck-postgres
+    environment:
+      POSTGRES_USER: pluck
+      POSTGRES_PASSWORD: pluck123
+      POSTGRES_DB: pluck
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pluck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MinIO Object Storage
+  minio:
+    image: minio/minio
+    container_name: pluck-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis for inter-process messaging
+  redis:
+    image: redis:7
+    container_name: pluck-redis
+    command: redis-server --save "" --appendonly no
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: pluck-postgres-data
+  minio_data:
+    name: pluck-minio-data
+
